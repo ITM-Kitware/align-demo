@@ -1,51 +1,67 @@
 import dash
 from dash.dependencies import Input, Output, State
+import dash_bootstrap_components as dbc
 from dash import dcc, html
 import json
 
 # Placeholder for the get_model function
 def get_model():
-    def model(scenario, probe, response):
+    # Note that this should be implemented to return a real model
+    def model(scenario, probe, responses):
         # Placeholder logic
         return {'choice': 0, 'reasoning': "Reasoning placeholder..."}
     return model
 
-# Initialize the Dash app
-app = dash.Dash(__name__)
+# Define your Bootstrap theme
+BOOTSTRAP_THEME = dbc.themes.BOOTSTRAP
 
-# Define the layout of the app
-app.layout = html.Div([
-    html.H1("Align-demo"),
-    dcc.Textarea(
+# Initialize the Dash app with Bootstap theme
+app = dash.Dash(__name__, external_stylesheets=[BOOTSTRAP_THEME])
+
+# Define the layout of the app with Bootstrap components
+app.layout = dbc.Container(fluid=True, children=[
+    html.H1("Align-demo", className="mb-4"),
+    
+    dbc.Textarea(
         id='scenario-input',
         value='',
-        style={'width': '100%', 'height': 300},
-        placeholder='Enter scenario...'
+        className="mb-3",
+        placeholder='Enter scenario...',
+        style={'height': '200px'},
     ),
-    dcc.Textarea(
+    dbc.Textarea(
         id='probe-input',
         value='',
-        style={'width': '100%', 'height': 100},
-        placeholder='Enter probe...'
+        className="mb-3",
+        placeholder='Enter probe...',
+        style={'height': '80px'},
     ),
-    dcc.Textarea(
+    dbc.Textarea(
         id='responses-input',
         value='',
-        style={'width': '100%', 'height': 200},
-        placeholder='Enter responses...'
+        className="mb-3",
+        placeholder='Enter responses...',
+        style={'height': '150px'},
     ),
-    html.Button('RUN', id='run-button', n_clicks=0),
-    html.Div(id='chosen-response-output', style={'whiteSpace': 'pre-line'}),
-    dcc.Textarea(
+    dbc.Button('RUN', id='run-button', color="primary", className="mb-3"),
+    
+    html.Div(
+        id='chosen-response-output',
+        className="mb-3",
+        style={'whiteSpace': 'pre-line'}
+    ),
+    
+    dbc.Textarea(
         id='justification-output',
         value='',
-        style={'width': '100%', 'height': 300},
+        # bs_size="lg",
         readOnly=True,
-        placeholder='Justification for the chosen response will appear here...'
+        placeholder='Justification for the chosen response will appear here...',
+        style={'height': '150px'}
     ),
 ])
 
-# Callback for running the model and updating the output components
+# Callbacks to update the chosen and justification outputs when RUN button is clicked
 @app.callback(
     [
         Output('chosen-response-output', 'children'),
@@ -60,11 +76,11 @@ app.layout = html.Div([
         State('responses-input', 'value')
     ]
 )
-def run_model(n_clicks, scenario, probe, response):
-    if n_clicks > 0:
+def run_model(n_clicks, scenario, probe, responses):
+    if n_clicks is not None:
         model = get_model()
-        result = model(scenario, probe, response)
-        response_lines = response.split('\n')
+        result = model(scenario, probe, responses)
+        response_lines = responses.split('\n')
         chosen_response = response_lines[result['choice']]
         justification = result['reasoning']
         return chosen_response, justification
@@ -73,4 +89,4 @@ def run_model(n_clicks, scenario, probe, response):
 
 # Run the app
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(host='0.0.0.0', port=8050, debug=True)
