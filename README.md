@@ -4,16 +4,17 @@ Do fist - 1️⃣, 2️⃣, 3️⃣, 4️⃣ - Do last
 
 ## Goals/Features
 ### Data
-- [ ] 1️⃣ Paste in/edit scenario, probe, responses (SPR)
+- [X] 1️⃣ Paste in/edit scenario, probe, responses (SPR)
 - [ ] 2️⃣ Select probe_id from dropdown that populates SPR inputs with text from dataset
 ### Model
-- [ ] 1️⃣ Hard-coded single model
+- [X] 1️⃣ Hard-coded single model
 - [ ] 2️⃣ Select ADM from dropdown that populates config text input from default config for that ADM
   - [ ] 3️⃣ Dynamically generate input widgets for the different fields specific to that ADM
     - [ ] 4️⃣ Display editable templates that can be referenced in the config
 ### Inference
-- [ ] 1️⃣ ‘RUN’ button that shows model choice selection and reasoning
-  - [ ] 2️⃣ Show a full log of everything the model did
+- [X] 1️⃣ ‘RUN’ button that shows model choice selection and reasoning
+  - [X] 2️⃣ Show a full log of everything the model did
+  - [ ] 3️⃣ Show a more user-friendly version of the log
 
 
 ### Components 1️⃣
