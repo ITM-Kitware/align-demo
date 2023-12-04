@@ -1,41 +1,51 @@
 import dash
-from dash.dependencies import Input, Output, State
 import dash_bootstrap_components as dbc
 from dash import dcc, html
+from dash.dependencies import Input, Output, State
 import json
 import io
+import yaml
+import os
+from datetime import datetime
 
-from align_system.algorithms.llama_index import LlamaIndex
 
-# domain_docs_dir: /data/shared/MVPData/DomainDocumentsPDF/
-#   device: cuda
-#   model_name: falcon
-#   retrieval_enabled: true
+# Make sure you have your 'dataset.json' in your project directory
+with open('dataset.json', 'r') as f:
+    dataset = json.load(f)
+    
+# Function to list YAML files in configs directory.
+def list_config_files(dir_path='configs'):
+    return [file for file in os.listdir(dir_path) if file.endswith('.yaml') or file.endswith('.yml')]
 
-algorithm = LlamaIndex(
-    domain_docs_dir='/data/shared/MVPData/DomainDocumentsPDF/',
-    device='cuda',
-    model_name='falcon',
-    retrieval_enabled=True
-)
-algorithm.load_model()
+# Initialize the placeholder function for get_algorithm
+def get_algorithm(config):
+    # Return a placeholder object that represents an algorithm
+    return lambda sample, target_kdmas, log_file: {"choice": 0, "reasoning": "Placeholder reasoning"}
 
-# Define your Bootstrap theme
-BOOTSTRAP_THEME = dbc.themes.BOOTSTRAP
 
-# Initialize the Dash app with Bootstap theme
-app = dash.Dash(__name__, external_stylesheets=[BOOTSTRAP_THEME])
+# Initialize an algorithm with an empty config as a placeholder
+algorithm = get_algorithm({})
+last_model_load_time = None
 
-# Define the layout of the app with Bootstrap components
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+
 app.layout = dbc.Container(fluid=False, style={'width': '70%'}, children=[
     html.H1('Align-demo', className='mb-4'),
+    
+    html.Label('Probe ID:', className='mb-2'),
+    dcc.Dropdown(
+        id='probe-id-dropdown',
+        options=[{'label': pid, 'value': pid} for pid in dataset.keys()],
+        placeholder='Select a probe ID...',
+        className='mb-3',
+    ),
 
     html.Label('Scenario:', className='mb-2'),
     dbc.Textarea(
         id='scenario-input',
         className='mb-3',
         placeholder='Enter scenario...',
-        style={'height': '200px'},
+        style={'height': '150px'},
     ),
     html.Label('Probe:', className='mb-2'),
     dbc.Textarea(
@@ -51,6 +61,15 @@ app.layout = dbc.Container(fluid=False, style={'width': '70%'}, children=[
         placeholder='Enter responses...',
         style={'height': '150px'},
     ),
+
+    html.Label('ADM Configuration (YAML):', className='mb-2'),
+    dbc.Textarea(
+        id='adm-config-input',
+        className='mb-3',
+        placeholder='Enter ADM configuration in YAML format...',
+        style={'height': '150px'},
+    ),
+
     dbc.Button('RUN', id='run-button', color='primary', className='mb-3'),
     html.Br(),  # Add a line break to create spacing
     html.Label('Chosen Response:', className='mb-2'),
@@ -67,7 +86,46 @@ app.layout = dbc.Container(fluid=False, style={'width': '70%'}, children=[
         placeholder='Justification for the chosen response will appear here...',
         style={'height': '150px'}
     ),
+    
+    html.Label('Log:', className='mb-2'),
+    dbc.Textarea(
+        id='log-output',
+        readOnly=True,
+        placeholder='Log output will appear here...',
+        style={'height': '200px', 'overflow': 'auto'},
+    ),
 ])
+
+# Callback to update scenario, probe, and responses when a probe ID is selected
+@app.callback(
+    [Output('scenario-input', 'value'),
+     Output('probe-input', 'value'),
+     Output('responses-input', 'value')],
+    [Input('probe-id-dropdown', 'value')]
+)
+def update_spr_inputs(probe_id):
+    if probe_id and probe_id in dataset:
+        entry = dataset[probe_id]
+        return entry['scenario'], entry['probe'], '\n'.join(entry['choices'])
+    else:
+        return '', '', ''
+
+# Callback for updating the algorithm based on ADM config input
+@app.callback(
+    [Output('log-output', 'value')],
+    [Input('adm-config-input', 'value')]
+)
+def update_algorithm(config_yaml):
+    if config_yaml:
+        try:
+            config = yaml.safe_load(config_yaml)
+            global algorithm
+            algorithm = get_algorithm(config)
+            return [f"Algorithm loaded with the following config:\n{json.dumps(config, indent=2)}"]
+        except yaml.YAMLError as e:
+            return [f"Error parsing YAML:\n{e}"]
+    return [""]
+
 
 # Callbacks to update the chosen and justification outputs when RUN button is clicked
 @app.callback(
@@ -110,7 +168,6 @@ def run_model(n_clicks, scenario, probe, responses):
         return chosen_response, justification
     else:
         return '', ''
-
-# Run the app
+    
 if __name__ == '__main__':
-    app.run_server(host='0.0.0.0', port=8050, debug=True)
+    app.run_server(debug=True)
