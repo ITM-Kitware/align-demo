@@ -1,10 +1,3 @@
-target_kdma_values:
-  mission: 10
-  denial: 10
-  risk_tolerance: 10
-  time_urgency: 10
-
-
 llama_index_adm:
   domain_docs_dir: /data/shared/MVPData/DomainDocumentsPDF/
   device: cuda

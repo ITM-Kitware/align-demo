@@ -6,30 +6,23 @@ import json
 import io
 import yaml
 import os
-from datetime import datetime
 
+from algorithms import get_algorithm
 
 # Make sure you have your 'dataset.json' in your project directory
-with open('dataset.json', 'r') as f:
+with open('data/bbn-data.json', 'r') as f:
     dataset = json.load(f)
     
 # Function to list YAML files in configs directory.
 def list_config_files(dir_path='configs'):
     return [file for file in os.listdir(dir_path) if file.endswith('.yaml') or file.endswith('.yml')]
 
-# Initialize the placeholder function for get_algorithm
-def get_algorithm(config):
-    # Return a placeholder object that represents an algorithm
-    return lambda sample, target_kdmas, log_file: {"choice": 0, "reasoning": "Placeholder reasoning"}
-
-
 # Initialize an algorithm with an empty config as a placeholder
-algorithm = get_algorithm({})
-last_model_load_time = None
+algorithm = None # TODO make this a dictionary mapping user-ids to algorithms so multiple users can use the app at once
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
-app.layout = dbc.Container(fluid=False, style={'width': '70%'}, children=[
+app.layout = dbc.Container(fluid=False, style={'width': '50%'}, children=[
     html.H1('Align-demo', className='mb-4'),
     
     html.Label('Probe ID:', className='mb-2'),
@@ -61,7 +54,7 @@ app.layout = dbc.Container(fluid=False, style={'width': '70%'}, children=[
         placeholder='Enter responses...',
         style={'height': '150px'},
     ),
-
+    
     html.Label('ADM Configuration (YAML):', className='mb-2'),
     dbc.Textarea(
         id='adm-config-input',
@@ -69,9 +62,17 @@ app.layout = dbc.Container(fluid=False, style={'width': '70%'}, children=[
         placeholder='Enter ADM configuration in YAML format...',
         style={'height': '150px'},
     ),
-
-    dbc.Button('RUN', id='run-button', color='primary', className='mb-3'),
-    html.Br(),  # Add a line break to create spacing
+    
+    dbc.Row([
+        dbc.Col([
+            dbc.Button('LOAD MODEL', id='load-model-button', color='primary', className='mb-3'),
+        ]),
+        dbc.Col([
+            dbc.Button('RUN', id='run-button', color='primary', className='mb-3'),    
+        ]),
+    ]),
+    
+    # html.Br(),  # Add a line break to create spacing
     html.Label('Chosen Response:', className='mb-2'),
     html.Div(
         id='chosen-response-output',
@@ -110,21 +111,27 @@ def update_spr_inputs(probe_id):
     else:
         return '', '', ''
 
-# Callback for updating the algorithm based on ADM config input
+# Callback for loading the model when the load model button is clicked and disabling the button
 @app.callback(
     [Output('log-output', 'value')],
-    [Input('adm-config-input', 'value')]
+    [Input('load-model-button', 'n_clicks')],
+    [State('adm-config-input', 'value')]
 )
-def update_algorithm(config_yaml):
-    if config_yaml:
-        try:
-            config = yaml.safe_load(config_yaml)
-            global algorithm
-            algorithm = get_algorithm(config)
-            return [f"Algorithm loaded with the following config:\n{json.dumps(config, indent=2)}"]
-        except yaml.YAMLError as e:
-            return [f"Error parsing YAML:\n{e}"]
-    return [""]
+def load_model(n_clicks, config_yaml):
+    global algorithm
+    if n_clicks is not None and n_clicks > 0:
+        if config_yaml:
+            try:
+                config = yaml.safe_load(config_yaml)
+                algorithm = get_algorithm(config) # TODO show the user some feedback that the model is loading
+                if algorithm is None:
+                    return [f'Error loading model with config:\n{json.dumps(config, indent=2)}']
+                
+                return [f'Algorithm loaded with the following config:\n{json.dumps(config, indent=2)}']
+            except yaml.YAMLError as e:
+                return [f'Error parsing YAML:\n{e}']
+        return ['No config provided']
+    return ['']
 
 
 # Callbacks to update the chosen and justification outputs when RUN button is clicked
