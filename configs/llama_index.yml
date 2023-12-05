@@ -1,3 +1,11 @@
+target_kdma_values:
+  basic_knowledge: 10
+  time_pressure: 10
+  risk_aversion: 10
+  fairness: 10
+  protocol_focus: 10
+  utilitarianism: 10
+
 llama_index_adm:
   domain_docs_dir: /data/shared/MVPData/DomainDocumentsPDF/
   device: cuda
