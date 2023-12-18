@@ -1,23 +1,37 @@
 # align-demo
 
-Do fist - 1️⃣, 2️⃣, 3️⃣, 4️⃣ - Do last
+🟡 = in progress
 
 ## Goals/Features
 ### Data
-- [X] 1️⃣ Paste in/edit scenario, probe, responses (SPR)
-- [X] 2️⃣ Select probe_id from dropdown that populates SPR inputs with text from dataset
+- [X] Paste in/edit scenario, probe, responses (SPR)
+- [X] Select probe_id from dropdown that populates SPR inputs with text from dataset
+- [X] Input device for target KDMA values
+- [ ] Dataset selection
+  - [ ] Which attributes depends on dataset... BBN or ST
+  - [ ] Which probes depends on dataset
+
 ### Model
-- [X] 1️⃣ Hard-coded single model
-- [X] 2️⃣ Select ADM from dropdown that populates config text input from default config for that ADM
-  - [ ] 3️⃣ Dynamically generate input widgets for the different fields specific to that ADM
-    - [ ] 4️⃣ Display editable templates that can be referenced in the config
+- [X] Hard-coded single model
+- [X] Select ADM from dropdown that populates config text input from default config for that ADM
+- [ ] 🟡 Make compatible with all of the ADM configs
+- [ ] Select multiple ADMs and run them all at once to compare their outputs
 ### Inference
-- [X] 1️⃣ ‘RUN’ button that shows model choice selection and reasoning
-  - [X] 1️⃣ Show a full log of everything the model did
-  - [X] 2️⃣ Show a more user-friendly version of the log
+- [X] ‘RUN’ button that shows model choice selection and reasoning
+  - [X] Show a full log of everything the model did
+  - [X] Show a more user-friendly version of the log
+- [ ] Generate an ADM-specific visualization of the system output
+- [ ] Generate comparison visualizations of multiple ADMs
+
+### Misc
+- [X] Add visual identifier to show chosen response
+- [ ] There should be a notion of confidence associated with answers
+  - [ ] Percentge (for now based on predicted and target KDMA values)
+- [ ] Format JSON output to be more readable
+- [ ] Add upload dataset functionality
 
 
-### Components 1️⃣
+### Phase 1️⃣
 - Scenario multi-line text input (15 lines)
 - Probe multi-line text input (3 lines)
 - Responses multi-line text input (5 lines)
@@ -33,7 +47,7 @@ Do fist - 1️⃣, 2️⃣, 3️⃣, 4️⃣ - Do last
 - Justification text area (10 lines)
 
 
-### Components 2️⃣
+### Phase 2️⃣
 - probe ID dropdown
   - On select, populate scenario, probe, responses
   - Read from `dataset.json` to populate the dropdown which is in this format:

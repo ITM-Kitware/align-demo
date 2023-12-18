@@ -10,23 +10,32 @@ from align_system.algorithms.multi_comparison_adm import MultiComparisonADM
 
 from align_system.algorithms.lib.aligned_decision_maker import AlignedDecisionMaker
 import align_system.evaluation.adm_evaluator as adm_evaluator
-
+import random
 
 class DummyADM(AlignedDecisionMaker):
     
     def __init__(self, default_choice, predict_kdma_values):
+        if default_choice == 'random':
+            default_choice = None
+            
         self.default_choice = default_choice
         self.predict_kdma_values = predict_kdma_values
     
-    def __call__(self, sample, target_kdma_values, **kwargs):    
+    def __call__(self, sample, target_kdma_values, **kwargs):
+        print(sample)
+        print(target_kdma_values)
+        choice = self.default_choice
+        if self.default_choice is None:
+            choice = random.choice(range(len(sample['choices'])))
+            
         response = {
-            'choice': self.default_choice
+            'choice': choice
         }
         
         if self.predict_kdma_values:
             response['predicted_kdma_values'] = [
                 {
-                    kdma_name: 0
+                    kdma_name: random.uniform(0, 10)
                     for kdma_name in target_kdma_values
                 }
                 for _ in sample['choices']    
@@ -35,28 +44,6 @@ class DummyADM(AlignedDecisionMaker):
         return response
 
 
-class OracleADM(AlignedDecisionMaker):
-    
-    def __init__(self, flip_alignment, predict_kdma_values):
-        self.flip_alignment = flip_alignment
-        self.predict_kdma_values = predict_kdma_values
-    
-    def __call__(self, sample, target_kdma_values, labels, **kwargs):
-        
-        eval_fn = max
-        if self.flip_alignment:
-            eval_fn = min
-        
-        choice_idx = eval_fn(range(len(labels)),
-            key=lambda i: adm_evaluator.kitware_similarity_score(target_kdma_values, labels[i])
-        )
-        
-        response = {'choice': choice_idx}
-        
-        if self.predict_kdma_values:
-            response['predicted_kdma_values'] = labels
-        
-        return response
     
 
 def chat_kdma_predicting_adm(config):
@@ -88,9 +75,6 @@ def dummy_adm(config):
     return DummyADM(**config)
 
 
-def oracle_adm(config):
-    return OracleADM(**config)
-
 def pulse_tagging_adm(config):
     return PulseTaggingADM.load_model(
         device=config['device'],
@@ -109,7 +93,6 @@ eval_fns = [
     llama_2_single_kdma_adm,
     llama_index_adm,
     dummy_adm,
-    oracle_adm,
     pulse_tagging_adm,
     multi_comparison_adm,
 ]
@@ -119,6 +102,6 @@ def get_algorithm(config):
     algorithm_function = [eval_fn for eval_fn in eval_fns if eval_fn.__name__ in config]
     if len(algorithm_function) != 1:
         return None
-    
-    return algorithm_function[0](config[algorithm_function[0].__name__])
+    algo_config = config[algorithm_function[0].__name__]
+    return algorithm_function[0](algo_config), algo_config
     
