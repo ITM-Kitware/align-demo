@@ -8,7 +8,7 @@ from align_system.algorithms.llama_index import LlamaIndex
 from align_system.algorithms.pulse_tagging_adm import PulseTaggingADM
 from align_system.algorithms.multi_comparison_adm import MultiComparisonADM
 
-from align_system.algorithms.lib.aligned_decision_maker import AlignedDecisionMaker
+from align_system.algorithms.abstracts import AlignedDecisionMaker
 import align_system.evaluation.adm_evaluator as adm_evaluator
 import random
 
