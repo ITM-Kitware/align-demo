@@ -1,5 +1,47 @@
 # align-demo
 
+## Description
+This repository contains the source files and configurations for a web application designed demo the algorithms in the align-system. The app is built with Python using the `dash` and `plotly` libraries. Users can interact with the app to select and run different algorithms, visualize the chosen algorithm's decision-making process, and compare outcomes across multiple algorithms.
+
+## Content Overview
+
+### `app.py`
+- Main application file containing the logic for a Dash web app.
+- Includes an interactive radar chart to visualize KDMA attributes and their values, which users can adjust by clicking on the chart
+- Implements callbacks for interactivity and supports loading different algorithms for decision-making simulations.
+
+### `algorithms.py`
+- Exposes the different algorithm classes from the align-system repository and contains the logic for handling algorithm configurations and decision-making processes
+
+### `dynamic_components.py`
+- Defines functions to create composite dash components
+
+### `test_app.py`
+- A script to develop components in before integrating them into the app.py script
+
+### `configs/`
+This directory contains various YAML configuration files:
+- `single-kdma-adm.yml`: Configuration for an algorithm that handles single KDMA values.
+- `multi-kdma-adm.yml`: Configures an algorithm capable of predicting multiple KDMA values.
+- `dummy.yml`: A simple configuration for testing purposes with a dummy algorithm.
+- `llama_index.yml`: Config specifies settings for an algorithm using index-based methods.
+
+## Usage
+To run the web app:
+
+1. Ensure you have Python installed along with the necessary libraries (`dash`, `plotly`, `dash-bootstrap-components`).
+```
+pip install requirements.txt
+```
+2. Navigate to the directory containing `app.py` or `test_app.py`.
+4. Run the script with the command `python app.py` or `python test_app.py`.
+5. Access the web app in your web browser at `http://127.0.0.1:8050/` or the specified port number.
+6. Use the user interface to interact with the app by loading configurations, running algorithms, and visualizing KDMA values.
+
+For any changes, modifications, or additional usage of the configs or algorithms, refer to the corresponding Python scripts and YAML files, customizing them as required for the intended experiment or demo.
+
+
+# Implementation Plan
 🟡 = in progress
 
 ## Goals/Features
