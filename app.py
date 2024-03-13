@@ -12,12 +12,12 @@ from algorithms import get_algorithm
 from dynamic_components import make_results_widget
 
 
-with open('data/bbn-data.json', 'r') as f:
-    dataset = json.load(f)
-
 # Function to list YAML files in configs directory.
 def list_config_files(dir_path='configs'):
     return [file for file in os.listdir(dir_path) if file.endswith('.yaml') or file.endswith('.yml')]
+
+def list_json_files(dir_path='data'):
+    return [file for file in os.listdir(dir_path) if file.endswith('.json')]
 
 # Initialize an algorithm with an empty config as a placeholder
 algorithm = None
@@ -52,6 +52,14 @@ app.layout = dbc.Container(fluid=False, style={'width': '50%'}, children=[
             for attribute, value in zip(attributes, initial_values)
         }
     }),  # Store component to keep track of attribute values
+    
+    dcc.Store(id='dataset-store'),
+    
+    dcc.Dropdown(
+        id='dataset-dropdown',
+        options=[{'label': i, 'value': i} for i in list_json_files()],
+        value='bbn-data.json'  # Default value
+    ),
     
     html.Label('Target KDMA Values:', className='mb-2'),
     
@@ -91,7 +99,7 @@ app.layout = dbc.Container(fluid=False, style={'width': '50%'}, children=[
     html.Label('Probe ID:', className='mb-2'),
     dcc.Dropdown(
         id='probe-id-dropdown',
-        options=[{'label': pid, 'value': pid} for pid in dataset.keys()],
+        options=[],
         placeholder='Select a probe ID...',
         className='mb-3',
     ),
@@ -184,15 +192,35 @@ app.layout = dbc.Container(fluid=False, style={'width': '50%'}, children=[
     )
 ])
 
+@app.callback(
+    Output('dataset-store', 'data'),
+    Input('dataset-dropdown', 'value')
+)
+def update_dataset_store(selected_dataset):
+    with open(f'data/{selected_dataset}', 'r') as f:
+        dataset = json.load(f)
+    return dataset
+
+@app.callback(
+    Output('probe-id-dropdown', 'options'),
+    Input('dataset-store', 'data')
+)
+def update_probe_id_dropdown(dataset):
+    if dataset:
+        return [{'label': probe_id, 'value': probe_id} for probe_id in dataset]
+    else:
+        return []
+
 # Callback to update scenario, probe, and responses when a probe ID is selected
 @app.callback(
     [Output('scenario-input', 'value'),
      Output('probe-input', 'value'),
      Output('responses-input', 'value')],
-    [Input('probe-id-dropdown', 'value')]
+    [Input('probe-id-dropdown', 'value'),
+     Input('dataset-store', 'data')]
 )
-def update_spr_inputs(probe_id):
-    if probe_id and probe_id in dataset:
+def update_spr_inputs(probe_id, dataset):
+    if probe_id and dataset and probe_id in dataset:
         entry = dataset[probe_id]
         return entry['scenario'], entry['probe'], '\n'.join(entry['choices'])
     else:
