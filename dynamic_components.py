@@ -13,7 +13,7 @@ def predicted_kdma_widget(predicted_kdma_values: Dict[str, int], label_kdma_valu
 
     if label_kdma_values is not None:
         categories = list(set(categories) & set(label_kdma_values.keys()))
-    
+
     predicted_values = [predicted_kdma_values[category] for category in categories]
 
     data = [go.Scatterpolar(
@@ -85,22 +85,21 @@ def predicted_kdma_choices_widget(choices_with_values: Dict[str, Tuple[Dict[str,
     return html.Div(card_grid)
 
 
-def make_results_widget(choices, model_response, target_kdmas, label_kdmas=None):
+def make_results_widget(choices, model_response, label_kdmas=None):
     if 'predicted_kdmas' in model_response:
         predicted_kdmas = model_response['predicted_kdmas']
-        
+
         choices_with_values = {
             choice: (
                 predicted_kdmas[i],
                 label_kdmas[i] if label_kdmas is not None else None,
-                target_kdmas
             )
             for i, choice in enumerate(choices)
         }
-        
+
         return predicted_kdma_choices_widget(choices_with_values, choice_idx=model_response['choice'])
     return None
-    
+
 
 
 # def algo_inputs
