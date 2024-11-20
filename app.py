@@ -5,242 +5,83 @@ import dash
 import dash_bootstrap_components as dbc
 from dash import dcc, html
 from dash.dependencies import Input, Output, State
-import plotly.express as px
-import pandas as pd
-
-from omegaconf import OmegaConf
 import hydra
+from omegaconf import OmegaConf
+import torch
+
 from align_system.utils.hydrate_state import hydrate_scenario_state
-from align_system.prompt_engineering.outlines_prompts import scenario_state_description_1
+# from transformers import pipeline
+
 
 from action_filtering import filter_actions
-
-# Function to list YAML files in configs directory.
-def list_config_files(dir_path):
-    return [file for file in os.listdir(dir_path) if file.endswith('.yaml') or file.endswith('.yml')]
-
-def list_json_files(dir_path='oracle-json-files'):
-    return [file for file in os.listdir(dir_path) if file.endswith('.json')]
+from app_layout import model_1_layout, model_2_layout, load_dataset_components
 
 # Initialize an algorithm with an empty config as a placeholder
 adm = None
+adm_2 = None
+# Torch determinism for reproducibility
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+torch.use_deterministic_algorithms(True)
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.SLATE, dbc.icons.BOOTSTRAP])
 
-# Define the attributes and initial values
-attributes = ['ingroup_bias', 'moral_judgement', 'value_of_life', 'quality_of_life']
-num_attributes = len(attributes)
-initial_values = [5] * num_attributes
-
-app.layout = dbc.Container(fluid=True, style={'width': '60%'}, children=[
+app.layout = dbc.Container(fluid=True, style={'width': '100%'}, children=[
     html.H1('Align-Demo', className='mb-4'),
 
-    dcc.Store(id='attributes-store', data={
-        'target_kdma_values': {
-            attribute: value
-            for attribute, value in zip(attributes, initial_values)
-        }
-    }),  # Store component to keep track of attribute values
-
+    # Store component to keep track of attribute values
     dcc.Store(id='dataset-store'),
     dcc.Store(id='scenario-id-store'),
     dcc.Store(id='alignment-target-store'),
-    dcc.Store(id="action-store"),
-    dcc.Store(id="action-gt-store"),
-    dcc.Store(id="justification-store"),
-    dcc.Store(id='log-store'),
+    dcc.Store(id='alignment-target-store-2'),
 
+    dbc.Stack(children=load_dataset_components, direction='horizontal', gap=3),
+    html.Hr(),
     dbc.Row([
-        dbc.Col([
-            html.Label('Input Dataset:', className='mb-2', style={'font-size': 25}),
-            dcc.Dropdown(
-                id='dataset-dropdown',
-                options=[{'label': i, 'value': i} for i in list_json_files()],
-                style={"height": '40px',
-                       'font-size': 22}
-            )
-        ]),
-
-        dbc.Col([
-            html.Label('Scenario ID:', className='mb-2', style={'font-size': 25}),
-            dcc.Dropdown(
-                id='scenario-id-dropdown',
-                options=[],
-                placeholder='Select a Scenario ID...',
-                className='mr-3',
-                style={"height": '40px',
-                       'font-size': 22}
-            ),
-        ]),
-        dbc.Col([
-            html.Label('Probe ID:', className='mb-2', style={'font-size': 25}),
-            dcc.Dropdown(
-                id='probe-id-dropdown',
-                options=[],
-                placeholder='Select a probe ID...',
-                className='mr-3',
-                style={"height": '40px',
-                       'font-size': 22}
-
-            )
-        ])
-    ]),
-
-    html.Div([
-        dbc.Accordion([
-            dbc.AccordionItem(
-                [
-                    html.Label('Scenario:', className='mb-2', style={'font-size': 25}),
-                    dbc.Textarea(
-                        id='scenario-input',
-                        className='mb-3',
-                        readOnly=True,
-                        placeholder='Enter scenario...',
-                        style={'height': '250px', 'font-size': 22},
-                    ),
-
-                    html.Label('Probe:', className='mb-2', style={'font-size': 25}),
-                    dbc.Textarea(
-                        id='probe-input',
-                        readOnly=True,
-                        className='mb-3',
-                        placeholder='Enter probe...',
-                        style={'height': '80px', 'font-size': 22},
-                    ),
-
-                    html.Label('Action Choices:', className='mb-2', style={'font-size': 25}),
-                    dbc.Textarea(
-                        id='responses-input',
-                        readOnly=True,
-                        className='mb-3',
-                        placeholder='Enter responses...',
-                        style={'height': '150px', 'font-size': 22},
-                    )
-                ], title=html.Label('Scenario-State Prompt', style={'font-size': 25})
-            ),
-        ]), html.Div(id="scenario-accordion", className="mt-4")
-    ]),
-
-    html.Label('Configuration Files:', className='mb-2', style={'font-size': 25}),
-    dcc.Dropdown(
-        id='alignment-target-dropdown',
-        options=[
-            {'label': filename, 'value': os.path.join('configs/hydra/alignment_target', filename)}
-            for filename in list_config_files('configs/hydra/alignment_target')
-        ],
-        placeholder='Select a configuration file...',
-        className='mb-3',
-        style={'font-size': 22}
-    ),
-
-    html.Label('ADM Configuration (YAML):', className='mb-2', style={'font-size': 25}),
-    dcc.Dropdown(
-        id='adm-config-input',
-        options=[
-            {'label': filename, 'value': os.path.join('configs/hydra/adm', filename)}
-            for filename in list_config_files('configs/hydra/adm')
-        ],
-        className='mb-3',
-        placeholder='Select ADM configuration..',
-        style={'font-size': 22}
-    ),
-
-    dbc.Row([
-        dbc.Col([
-            dcc.Loading(
-                id="loading-indicator-load",
-                children=[
-                    dbc.Button('LOAD MODEL', id='load-model-button', color='primary', className='mb-3'),
-                ],
-                type="default"
-            ),
-        ]),
-        dbc.Col([
-            dcc.Loading(
-                id="loading-indicator-run",
-                children=[
-                    dbc.Button('RUN MODEL', id='run-button', color='primary', className='mb-3'),
-                ],
-                type="default"
-            ),
-        ]),
-        dbc.Col([
-            dbc.Button('DISPLAY RESULTS', id='results-button', color='primary', className='mb-3'),
-        ]),
-    ]),
-
-    dcc.Loading(
-        html.Div([
-            html.Label('Chosen Response:', className='mb-2', style={'font-size': 25}),
-            dbc.Row([
-                dbc.Col([
-                    dbc.Textarea(
-                        id='action-output',
-                        readOnly=True,
-                        className='mb-3',
-                        style={'height': '50px'}
-                    ),
-                ]),
-                dbc.Col([
-                    dbc.Textarea(
-                        id='kdma-output',
-                        readOnly=True,
-                        className='mb-3',
-                        style={'height': '50px'}
-                    ),
-                ]),
-            ]),
-
-            html.Label('Justification:', className='mb-2', style={'font-size': 25}),
-            dbc.Textarea(
-                id='justification-output',
-                readOnly=True,
-                placeholder='Justification for the chosen response will appear here...',
-                style={'height': '150px'}
-            ),
-
-
-            html.Label('GT vs Predicted KDMA:', className='mb-2'),
-            dcc.Graph(id="kdma-bar-chart")
-        ], id='results', style={'display': 'none'})
-    )
+        dbc.Col(children=model_1_layout),
+        dbc.Col(children=model_2_layout),
+    ])
 ])
 
+
+### -------------------- Load Dataset to Store -------------------------- ###
 @app.callback(
     [Output('dataset-store', 'data'),
      Output('scenario-id-store', 'data')],
-    Input('dataset-dropdown', 'value'),
-    prevent_initial_call=True
+    [Input('dataset-dropdown', 'value')],
+    prevent_initial_call=True,
 )
-def update_dataset_store(selected_dataset):
+def load_dataset_store(selected_dataset):
     with open(f'oracle-json-files/{selected_dataset}', 'r') as f:
         dataset = json.load(f)
+        scenario_ids = []
+        scenarios = {}
+        for record in dataset:
+            scenario_id = record['input']['scenario_id']
 
-    scenario_ids = []
-    scenarios = {}
-    for record in dataset:
-        scenario_id = record['input']['scenario_id']
+            if scenario_id not in scenarios:
+                scenario_ids.append(scenario_id)
+                scenarios[scenario_id] = []
 
-        if scenario_id not in scenarios:
-            scenario_ids.append(scenario_id)
-            scenarios[scenario_id] = []
+            scenarios[scenario_id].append(
+                record['input']
+            )
+        return scenarios, scenario_ids
 
-        scenarios[scenario_id].append(
-            record['input']
-        )
-    return scenarios, scenario_ids
-
+### -------------------- Updated Scenario ID Dropdowns for both models --------------------- ###
 @app.callback(
     Output('scenario-id-dropdown', 'options'),
-    Input('scenario-id-store', 'data'),
-    prevent_initial_call=True
+    [Input('scenario-id-store', 'data')],
+    prevent_initial_call=True,
 )
 def update_scenario_id_dropdown(scenario_ids):
     if scenario_ids:
-        return [{'label': scenario_id, 'value': scenario_id} for scenario_id in scenario_ids]
+        scenarios = [{'label': str(scenario_id), 'value': str(scenario_id)} for scenario_id in scenario_ids]
+        return scenarios
     else:
-        return []
+        return [], []
 
+
+# ### -------------------- Updated Probe ID Dropdowns --------------------- ###
 @app.callback(
     Output('probe-id-dropdown', 'options'),
     State('dataset-store', 'data'),
@@ -262,141 +103,346 @@ def update_probe_id_dropdown(scenarios, scenario_id):
     else:
         return []
 
-# Callback to update scenario, probe, and responses when a probe ID is selected
-@app.callback(
-    [Output('scenario-input', 'value'),
-     Output('probe-input', 'value'),
-     Output('responses-input', 'value')],
-    [State('dataset-store', 'data'),
-     State('scenario-id-dropdown', 'value')],
-    Input('probe-id-dropdown', 'value'),
-    prevent_initial_call=True,
-)
-def update_spr_inputs(scenarios, scenario_id, probe_id):
-    for scenario in scenarios[scenario_id]:
-        state, actions = hydrate_scenario_state(scenario)
-        actions_filtered = filter_actions(state, actions)
-        state_dict = state.to_dict()
-        if state_dict["meta_info"]["probe_response"] is not None:
-            if probe_id != state_dict["meta_info"]["probe_response"]["probe_id"]:
-                continue
-            probe_id = state_dict["meta_info"]["probe_response"]["probe_id"]
-    if probe_id:
-        action_ids = []
-        for action in actions_filtered:
-            action_id_split = action.action_id.split('_')
-            action_ids.append(action_id_split[0].capitalize() + ' ' + ' '.join(act.capitalize() for act in action_id_split[1:]))
-        return (
-            scenario_state_description_1(state),
-            'Who would you treat?',
-            '\n'.join(action for action in sorted(action_ids))
-        )
-    else:
-        return '', '', ''
-
-# Callback to load alignment target
-@app.callback(
-    [Output('alignment-target-store', 'data')],
-    [Input('alignment-target-dropdown', 'value')],
-    prevent_initial_call=True,
-)
-def load_alignment_target(config):
-    if config:
-        alignment_target = OmegaConf.load(config)
-        alignment_target = OmegaConf.to_object(alignment_target)
-    else:
-        alignment_target = None
-    return [alignment_target]
-
-
-# Callback for loading the model when the load model button is clicked and disabling the button
+### -------------------- LLM loading and ADM instantiation -------------------------- ###
 @app.callback(
     Output('load-model-button', 'disabled'),
     [Input('load-model-button', 'n_clicks')],
-    [State('adm-config-input', 'value')],
+    [State('llm-dropdown', 'value'),
+     State('adm-config-input', 'value'),
+     State('system-prompt-checklist', 'value')],
     prevent_initial_call=True
 )
-def load_model(n_clicks, config_yaml_path):
-    adm_config = OmegaConf.load(config_yaml_path)
-    global adm
-    adm = hydra.utils.instantiate(adm_config, recursive=True)
+def load_llm(n_clicks, llm_backbone, adm_type, aligned):
     if n_clicks > 0:
-        return True
+        adm_config_path = os.path.join('configs/hydra/adm', f"{adm_type}_baseline.yaml")
+        if aligned is not None:
+            adm_config_path = os.path.join('configs/hydra/adm', f"{adm_type}_aligned.yaml")
+        adm_config = OmegaConf.load(adm_config_path)
+        adm_config["model_name"] = llm_backbone
+        global adm
+        adm = hydra.utils.instantiate(adm_config, recursive=True)
+        return False
 
 @app.callback(
-    [Output('run-button', 'disabled'),
-     Output('action-gt-store', 'data', allow_duplicate=True),
-     Output('action-store', 'data', allow_duplicate=True),
-     Output('justification-store', 'data', allow_duplicate=True)],
-    [Input('run-button', 'n_clicks')],
-    [State('alignment-target-store', 'data'),
-     State('dataset-store', 'data'),
+    Output('load-model-button-2', 'disabled'),
+    [Input('load-model-button-2', 'n_clicks')],
+    [State('llm-dropdown-2', 'value'),
+     State('adm-config-input-2', 'value'),
+     State('system-prompt-checklist-2', 'value')],
+    prevent_initial_call=True
+)
+def load_llm_2(n_clicks, llm_backbone, adm_type, aligned):
+    if n_clicks > 0:
+        adm_config_path = os.path.join('configs/hydra/adm', f"{adm_type}_baseline.yaml")
+        if aligned is not None:
+            adm_config_path = os.path.join('configs/hydra/adm', f"{adm_type}_aligned.yaml")
+        adm_config = OmegaConf.load(adm_config_path)
+        adm_config["model_name"] = llm_backbone
+        global adm_2
+        adm_2 = hydra.utils.instantiate(adm_config, recursive=True)
+        return False
+
+### -------------------- Load Alignment Target -------------------------- ###
+@app.callback(
+    [Output('alignment-target-store', 'data')],
+    Input('load-system-prompt-button', 'n_clicks'),
+    [State('system-prompt-checklist', 'value'),
+     State('kdma-dropdown', 'value'),
+     State('kdma-slider', 'value')],
+    prevent_initial_call=True,
+)
+def load_alignment_target(n_clicks, is_aligned, kdma, kdma_value):
+    if n_clicks > 0:
+        if kdma and 'aligned' in is_aligned:
+            kdma_split = kdma.split('_')
+            kdma_file = ' '.join(kdma_split).capitalize()
+            if kdma_file in ["Moral deservingness", "Maximization"]:
+                binary_alignment = "low"
+                print(kdma_value)
+                if float(kdma_value) >= 0.5:
+                    binary_alignment = "high"
+                alignment_target = OmegaConf.load(os.path.join("configs/hydra/alignment_target",f"{kdma}_{binary_alignment}.yaml"))
+
+            alignment_target = OmegaConf.to_object(alignment_target)
+        else:
+            alignment_target = None
+        return [alignment_target]
+
+@app.callback(
+    [Output('alignment-target-store-2', 'data')],
+    Input('load-system-prompt-button-2', 'n_clicks'),
+    [State('system-prompt-checklist-2', 'value'),
+     State('kdma-dropdown-2', 'value'),
+     State('kdma-slider-2', 'value')],
+    prevent_initial_call=True,
+)
+def load_alignment_target_2(n_clicks, is_aligned, kdma, kdma_value):
+    if n_clicks > 0:
+        if kdma and 'aligned' in is_aligned:
+            kdma_split = kdma.split('_')
+            kdma_file = ' '.join(kdma_split).capitalize()
+            if kdma_file in ["Moral deservingness", "Maximization"]:
+                binary_alignment = "low"
+                if float(kdma_value) >= 0.5:
+                    binary_alignment = "high"
+                alignment_target = OmegaConf.load(os.path.join("configs/hydra/alignment_target",f"{kdma}_{binary_alignment}.yaml"))
+
+            alignment_target = OmegaConf.to_object(alignment_target)
+        else:
+            alignment_target = None
+        return [alignment_target]
+
+@app.callback(
+    [Output('slider-div', 'style'),
+     Output('alignment-target-stack', 'style'),
+     Output('space-div', 'style')],
+    Input('system-prompt-checklist', 'value'),
+    prevent_initial_call=True
+)
+def show_hide_alignment_target(aligned):
+    if 'aligned' in aligned and aligned is not None:
+        return {'display': 'block'}, {'display': 'flex'}, {'display': 'none'}
+    return {'display': 'none'}, {'display': 'none'}, {'display': 'block', 'marginBottom': '170px'}
+
+@app.callback(
+    [Output('slider-div-2', 'style'),
+     Output('alignment-target-stack-2', 'style'),
+     Output('space-div-2', 'style')],
+    Input('system-prompt-checklist-2', 'value'),
+    prevent_initial_call=True
+)
+def show_hide_alignment_target_2(aligned):
+    if 'aligned' in aligned and aligned is not None:
+        return {'display': 'block'}, {'display': 'flex'}, {'display': 'none'}
+    return {'display': 'none'}, {'display': 'none'}, {'display': 'block', 'marginBottom': '170px'}
+
+### ------------------------ Load ADM System Prompt to UI ------------------------ ###
+
+@app.callback(
+    [Output('system-prompt', 'value'),
+     Output('action-choices-prompt', 'value')],
+    [Input('load-system-prompt-button', 'n_clicks'),
+     Input('alignment-target-store', 'data')],
+    [State('dataset-store', 'data'),
      State('scenario-id-dropdown', 'value'),
      State('probe-id-dropdown', 'value')],
     prevent_initial_call=True
 )
-def run_model(n_clicks, alignment_target, scenarios, scenario_id, probe_id):
-    for i, scenario in enumerate(scenarios[scenario_id]):
-        state, actions = hydrate_scenario_state(scenario)
-        actions_filtered = filter_actions(state, actions)
-        state_dict = state.to_dict()
-        if state_dict["meta_info"]["probe_response"] is not None:
-            if probe_id != state_dict["meta_info"]["probe_response"]["probe_id"]:
-                continue
-            probe_id = state_dict["meta_info"]["probe_response"]["probe_id"]
+def load_system_prompt(n_clicks, alignment_target, scenarios, scenario_id, probe_id):
+    if n_clicks > 0:
+        for scenario in scenarios[scenario_id]:
+            state, actions = hydrate_scenario_state(scenario)
+            actions_filtered = filter_actions(state, actions)
+            state_dict = state.to_dict()
+            if state_dict["meta_info"]["probe_response"] is not None:
+                if probe_id != state_dict["meta_info"]["probe_response"]["probe_id"]:
+                    continue
+                probe_id = state_dict["meta_info"]["probe_response"]["probe_id"]
+        kwargs = {
+            'demo_kwargs': {
+                'max_generator_tokens': 8092,
+                'generator_seed': 2,
+                'shuffle_choices': False
+            }
+        }
+        if alignment_target is not None:
+            alignment_target = OmegaConf.create(alignment_target)
 
-    if alignment_target is not None:
-        alignment_target = OmegaConf.create(alignment_target)
+        prompts, _ = adm.instance.get_dialog_texts(
+            scenario_state=state,
+            available_actions=actions_filtered,
+            alignment_target=alignment_target,
+            kdma_descriptions_map="configs/prompt_engineering/kdma_descriptions.yml",
+            demo_kwargs=kwargs["demo_kwargs"]
+        )
 
-    action_taken = adm.instance.choose_action(
-        scenario_state=state,
-        available_actions=actions_filtered,
-        alignment_target=alignment_target,
-        kdma_descriptions_map='/data/users/barry.ravichandran/ITM/align-system/align_system/prompt_engineering/kdma_descriptions.yml',
-        **adm.get('inference_kwargs', {}))
+        prompt_sections = prompts[0].split('\n\n')
 
-    actions_filtered_dicts = [action.to_dict() for action in actions_filtered]
-    action_taken_dict = action_taken[0].to_dict()
-    for action_gt in actions_filtered_dicts:
-        if action_gt['action_id'] == action_taken_dict['action_id']:
-            chosen_action_gt = action_gt
-            break
+        prompt = '\n\n'.join(prompt_sections[:-1])
+        action_choices = prompt_sections[-1]
 
-    return (
-        None,
-        [chosen_action_gt],
-        [action_taken_dict],
-        [str(action_taken[0].justification.rstrip())]
-    )
+        return [prompt], [action_choices]
 
-# Callbacks to update the chosen and justification outputs when RUN button is clicked
 @app.callback(
-    [Output('action-output', 'value'),
-     Output('kdma-output', 'value'),
-     Output('justification-output', 'value'),
-     Output('kdma-bar-chart', 'figure'),
-     Output('results', 'style')],
-    [Input('results-button', 'n_clicks')],
-    [State('action-gt-store', 'data'),
-     State('action-store', 'data'),
-     State('justification-store', 'data')],
+    [Output('system-prompt-2', 'value'),
+     Output('action-choices-prompt-2', 'value')],
+    [Input('load-system-prompt-button-2', 'n_clicks'),
+     Input('alignment-target-store-2', 'data')],
+    [State('dataset-store', 'data'),
+     State('scenario-id-dropdown', 'value'),
+     State('probe-id-dropdown', 'value')],
     prevent_initial_call=True
 )
-def display_results(n_clicks, gt, chosen_response, justification):
+def load_system_prompt_2(n_clicks, alignment_target, scenarios, scenario_id, probe_id):
+    if n_clicks > 0:
+        for scenario in scenarios[scenario_id]:
+            state, actions = hydrate_scenario_state(scenario)
+            actions_filtered = filter_actions(state, actions)
+            state_dict = state.to_dict()
+            if state_dict["meta_info"]["probe_response"] is not None:
+                if probe_id != state_dict["meta_info"]["probe_response"]["probe_id"]:
+                    continue
+                probe_id = state_dict["meta_info"]["probe_response"]["probe_id"]
 
-    if n_clicks is not None and n_clicks > 0:
-        gt_action = gt[0]["kdma_association"]
-        action_id_chosen = chosen_response[0]["action_id"]
-        action_chosen = "Action: " + action_id_chosen
-        kdma_chosen = "KDMA: " + str(chosen_response[0]["kdma_association"])
-        gt_value = list(gt_action.values())[0] if gt_action is not None else 0
-        kdma_value = list(chosen_response[0]["kdma_association"].values())[0]
-        df_kdma = pd.DataFrame({"x_data":["GT_KDMA", "Chosen KDMA"], "y_data": [gt_value, kdma_value]})
-        fig = px.bar(df_kdma, x="x_data", y="y_data", title="KDMA", width=800, height=400)
-        return action_chosen, kdma_chosen, justification, fig, {'display': 'block'}
-    else:
-        return '', '', '', None, {'display': 'none'}
+        kwargs = {
+            'demo_kwargs': {
+                'max_generator_tokens': 8092,
+                'generator_seed': 2,
+                'shuffle_choices': False
+            }
+        }
+        if alignment_target is not None:
+            alignment_target = OmegaConf.create(alignment_target)
+        prompts, positive_dialogs = adm_2.instance.get_dialog_texts(
+            scenario_state=state,
+            available_actions=actions_filtered,
+            alignment_target=alignment_target,
+            kdma_descriptions_map="configs/prompt_engineering/kdma_descriptions.yml",
+            demo_kwargs=kwargs["demo_kwargs"]
+        )
 
+        prompt_sections = prompts[0].split('\n\n')
+
+        prompt = '\n\n'.join(prompt_sections[:-1])
+        action_choices = prompt_sections[-1]
+
+        return [prompt], [action_choices]
+
+### ------------------------ Run ADM inference to generate response ------------------------ ###
+@app.callback(
+    [Output('system-response', 'value')],
+    [Input('run-button', 'n_clicks')],
+    [State('alignment-target-store', 'data'),
+     State('dataset-store', 'data'),
+     State('system-prompt','value'),
+     State('scenario-id-dropdown', 'value'),
+     State('probe-id-dropdown', 'value')],
+    prevent_initial_call=True
+)
+def run_model(n_clicks, alignment_target, scenarios, system_prompt, scenario_id, probe_id):
+
+    if n_clicks > 0:
+        for scenario in scenarios[scenario_id]:
+            state, actions = hydrate_scenario_state(scenario)
+            actions_filtered = filter_actions(state, actions)
+            state_dict = state.to_dict()
+            if state_dict["meta_info"]["probe_response"] is not None:
+                if probe_id != state_dict["meta_info"]["probe_response"]["probe_id"]:
+                    continue
+                probe_id = state_dict["meta_info"]["probe_response"]["probe_id"]
+        if alignment_target is not None:
+            alignment_target = OmegaConf.create(alignment_target)
+
+        if isinstance(system_prompt, list):
+            system_prompt = system_prompt[0]
+
+        top_level_system_prompt = system_prompt.split('\n\n')[0].split('[INST]')[1]
+        state.unstructured = system_prompt.split('\n\n')[2].split('\n')[1]
+        character_unstructured = system_prompt.split('\n\n')[1].split('\n')[1:]
+        print(character_unstructured)
+        for i, j in zip(range(len(state.characters)), range(0, len(state.characters) * 2, 2)):
+            state.characters[i].unstructured = character_unstructured[j].split(':')[1]
+            state.characters[i].intent = character_unstructured[j+1].split(':')[1]
+
+        adm.instance.system_ui_prompt = top_level_system_prompt
+
+        kwargs = {
+            'demo_kwargs': {
+                'max_generator_tokens': 8092,
+                'generator_seed': 2,
+                'shuffle_choices': False
+            }
+        }
+        action_taken, _ = adm.instance.top_level_choose_action(
+            scenario_state=state,
+            available_actions=actions_filtered,
+            alignment_target=alignment_target,
+            kdma_descriptions_map='configs/prompt_engineering/kdma_descriptions.yml',
+            tokenizer_kwargs={'truncation': False},
+            demo_kwargs=kwargs["demo_kwargs"])
+
+        actions_filtered_dicts = [action.to_dict() for action in actions_filtered]
+        action_taken_dict = action_taken.to_dict()
+        for action_gt in actions_filtered_dicts:
+            if action_gt['action_id'] == action_taken_dict['action_id']:
+                chosen_action_gt = action_gt
+                break
+
+        chosen_action_gt = chosen_action_gt["unstructured"]
+        return [
+            f"ACTION CHOICE:\n"
+            f"{chosen_action_gt}"
+            f"\n\nJUSTIFICATION:\n"
+            f"{action_taken.justification}"
+        ]
+
+@app.callback(
+    [Output('system-response-2', 'value')],
+    [Input('run-button-2', 'n_clicks')],
+    [State('alignment-target-store-2', 'data'),
+     State('dataset-store', 'data'),
+     State('system-prompt-2','value'),
+     State('scenario-id-dropdown', 'value'),
+     State('probe-id-dropdown', 'value')],
+    prevent_initial_call=True
+)
+def run_model_2(n_clicks, alignment_target, scenarios, system_prompt, scenario_id, probe_id):
+
+    if n_clicks > 0:
+        for scenario in scenarios[scenario_id]:
+            state, actions = hydrate_scenario_state(scenario)
+            actions_filtered = filter_actions(state, actions)
+            state_dict = state.to_dict()
+            if state_dict["meta_info"]["probe_response"] is not None:
+                if probe_id != state_dict["meta_info"]["probe_response"]["probe_id"]:
+                    continue
+                probe_id = state_dict["meta_info"]["probe_response"]["probe_id"]
+        if alignment_target is not None:
+            alignment_target = OmegaConf.create(alignment_target)
+
+        if isinstance(system_prompt, list):
+            system_prompt = system_prompt[0]
+
+        top_level_system_prompt = system_prompt.split('\n\n')[0].split('[INST]')[1]
+        state.unstructured = system_prompt.split('\n\n')[2].split('\n')[1]
+        character_unstructured = system_prompt.split('\n\n')[1].split('\n')[1:]
+        print(character_unstructured)
+        for i, j in zip(range(len(state.characters)), range(0, len(state.characters) * 2, 2)):
+            state.characters[i].unstructured = character_unstructured[j].split(':')[1]
+            state.characters[i].intent = character_unstructured[j+1].split(':')[1]
+
+        adm_2.instance.system_ui_prompt = top_level_system_prompt
+
+        kwargs = {
+            'demo_kwargs': {
+                'max_generator_tokens': 8092,
+                'generator_seed': 2,
+                'shuffle_choices': False
+            }
+        }
+        action_taken, _ = adm_2.instance.top_level_choose_action(
+            scenario_state=state,
+            available_actions=actions_filtered,
+            alignment_target=alignment_target,
+            kdma_descriptions_map='configs/prompt_engineering/kdma_descriptions.yml',
+            tokenizer_kwargs={'truncation': False},
+            demo_kwargs=kwargs["demo_kwargs"]
+        )
+
+        actions_filtered_dicts = [action.to_dict() for action in actions_filtered]
+        action_taken_dict = action_taken.to_dict()
+        for action_gt in actions_filtered_dicts:
+            if action_gt['action_id'] == action_taken_dict['action_id']:
+                chosen_action_gt = action_gt
+                break
+
+        chosen_action_gt = chosen_action_gt["unstructured"]
+        return [
+            f"ACTION CHOICE:\n"
+            f"{chosen_action_gt}"
+            f"\n\nJUSTIFICATION:\n"
+            f"{action_taken.justification}"
+        ]
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(debug=True, port=8052)

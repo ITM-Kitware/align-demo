@@ -1,3 +1,0 @@
-dummy_adm:
-  default_choice: random
-  predict_kdma_values: true

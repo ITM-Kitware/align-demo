@@ -1,5 +1,0 @@
-llama_index_adm:
-  domain_docs_dir: /data/shared/MVPData/DomainDocumentsPDF/
-  device: cuda
-  model_name: falcon
-  retrieval_enabled: true
